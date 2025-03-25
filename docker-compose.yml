@@ -1,0 +1,155 @@
+version: '3.8'
+
+
+services:
+  redis:
+    restart: always
+    image: redis:latest
+    container_name: redis
+    networks:
+      - gateway
+    ports:
+      - "6379:6379"
+    volumes:
+      - ~/redis/data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 2s
+      retries: 10
+
+  kafka:
+    restart: always
+    image: confluentinc/cp-kafka:6.2.0
+    container_name: kafka
+    networks:
+      - gateway
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "9101:9101"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
+      KAFKA_ADVERTISED_HOST_NAME: kafka:9092
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+  kafdrop:
+    restart: always
+    image: obsidiandynamics/kafdrop:3.27.0
+    networks:
+      - gateway
+    depends_on:
+      - kafka
+      - zookeeper
+    ports:
+      - 19000:9000
+    environment:
+      KAFKA_BROKERCONNECT: kafka:29092
+
+  zookeeper:
+    restart: always
+    image: confluentinc/cp-zookeeper:6.2.0
+    container_name: zookeeper
+    networks:
+      - gateway
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  consumer:
+    container_name: consumer
+    build:
+      context: ./build_scripts/kafka
+      dockerfile: Dockerfile
+    ports:
+      - 8001:8001
+    restart: "always"
+    depends_on:
+      - kafka
+      - zookeeper
+    networks:
+      - gateway
+    command: python3 /app/streaming/consumer.py
+    volumes:
+      - ./:/app
+
+      - ./src/consumer/logs:/app/logs
+
+  # worker:
+  #   restart: "always"
+  #   build:
+  #     context: ./build_scripts/worker_process
+  #     dockerfile: Dockerfile
+  #   command: celery -A tasks worker --loglevel=DEBUG -E --logfile=/app/worker_logs/celery1.log
+  #   environment:
+  #     CELERY_BROKER_URL: redis://redis
+  #     CELERY_RESULT_BACKEND: redis://redis
+  #   depends_on:
+  #     - redis
+  #     - zookeeper
+  #     - kafka
+  #   networks:
+  #     - gateway
+  #   volumes: 
+  #     - ./src:/app
+  #     - ./worker_logs:/app/worker_logs
+  #     - shared-volumes:/app/tenant_data
+  # app:
+  #   # restart: "always"
+  #   build:
+  #     context: ./build_scripts/app_build
+  #     dockerfile: Dockerfile
+  #   container_name: app
+  #   ports:
+  #     - "5000:5000"
+  #   volumes:
+  #     - ./src:/app
+  #     - ./logs:/app/logs
+  #     - ./tmp_data:/app/tmp_data
+  #     - shared-volumes:/app/tenant_data
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+  #   command: python3 /app/app.py
+  #   environment:
+  #     CELERY_BROKER_URL: redis://redis
+  #     CELERY_RESULT_BACKEND: redis://redis
+  #   networks:
+  #     - gateway
+
+  # worker-dashboard:
+  #   build:
+  #     context: ./build_scripts/worker_process
+  #     dockerfile: Dockerfile
+  #   restart: unless-stopped
+  #   container_name: worker-dashboard
+  #   environment:
+  #     FLOWER_BASIC_AUTH: ${FLOWER_BASIC_AUTH:-admin:admin}
+  #     CELERY_BROKER_URL: redis://redis
+  #     CELERY_RESULT_BACKEND: redis://redis
+  #   ports:
+  #     - 5555:5555
+  #   command: celery --broker=${CELERY_BROKER_URL:-redis://redis:6379/0} flower --port=5555 --log_file_prefix=/app/worker_logs/flower.log
+  #   depends_on:
+  #     - redis
+  #     - worker
+  #   networks:
+  #     - gateway
+  #   volumes:
+  #     - ./worker_logs:/app/worker_logs
+  #     - shared-volumes:/tmp/
+
+networks:
+  gateway:
+    external: true
+
+volumes:
+  shared-volumes:
+    driver: local

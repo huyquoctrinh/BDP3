@@ -37,7 +37,7 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
   kafdrop:
     restart: always
     image: obsidiandynamics/kafdrop:3.27.0
@@ -49,7 +49,7 @@ services:
     ports:
       - 19000:9000
     environment:
-      KAFKA_BROKERCONNECT: kafka:29092
+      KAFKA_BROKERCONNECT: kafka:29092,kafka1:29092,kafka2:29092
 
   zookeeper:
     restart: always
@@ -63,24 +63,37 @@ services:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
 
-  consumer:
-    container_name: consumer
-    build:
-      context: ./build_scripts/kafka
-      dockerfile: Dockerfile
-    ports:
-      - 8001:8001
-    restart: "always"
-    depends_on:
-      - kafka
-      - zookeeper
+  mongo:
+    restart: always
+    image: mongo:latest
+    container_name: mongo
     networks:
       - gateway
-    command: python3 /app/streaming/consumer.py
+    ports:
+      - "27017:27017"
     volumes:
-      - ./:/app
+      - ~/mongo/data:/data/db
+    # environment:
+    #   MONGO_INITDB_ROOT_USERNAME: root
+    #   MONGO_INITDB_ROOT_PASSWORD: root123
+  # consumer:
+  #   container_name: consumer
+  #   build:
+  #     context: ./build_scripts/kafka
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - 8001:8001
+  #   restart: "always"
+  #   depends_on:
+  #     - kafka
+  #     - zookeeper
+  #   networks:
+  #     - gateway
+  #   command: python3 /app/streaming/consumer.py
+  #   volumes:
+  #     - ./:/app
 
-      - ./src/consumer/logs:/app/logs
+  #     - ./src/consumer/logs:/app/logs
 
   # worker:
   #   restart: "always"

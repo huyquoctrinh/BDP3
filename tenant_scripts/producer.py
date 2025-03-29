@@ -15,16 +15,20 @@ class DataProducer:
         self.topic = topic
 
     def produce(self, data):
+        # print(data)
         self.producer.send(self.topic, value=data)
         self.producer.flush()
         print(f"Produced data: {data}")
     
 if __name__ == "__main__":
     data_producer = DataProducer(topic='test')
-    df = pd.read_csv('C:/huy/big_data/bdp3/dataset/test.tsv', sep="\t", on_bad_lines="skip")
+    df = pd.read_csv('/home/trnhquchuy/BDP3/dataset/test.tsv', sep="\t", on_bad_lines="skip")
     for i in range(10):
-        data_producer.produce({
-            "tenant_id": "9",
-            "review": df.iloc[i].to_dict()
-        })
+        data = df.iloc[i].to_dict()
+        data['tenant_id'] = "9"
+        data_producer.produce(data)
+        # data_producer.produce({
+        #     "tenant_id": "9",
+        #     "review": 
+        # })
         time.sleep(1)
